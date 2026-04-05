@@ -94,14 +94,15 @@ const App = () => {
   const handleAnalysis = async (base64Data, mimeType) => {
     if (!subscriptionStatus) return;
     if (!apiKey) {
-        alert("Falta la API Key en Vercel (REACT_APP_GEMINI_API_KEY)");
+        alert("Falta la API Key en Vercel");
         return;
     }
     
     setLoading(true);
     setAnalysisResult(null);
 
-    const systemPrompt = `Expert in Mexican NOM-051. Analyze ingredients in image. Respond in JSON only: { "found": boolean, "detectedIngredients": [], "productName": "" }`;
+    // Unimos la instrucción y el análisis en un solo mensaje para la versión v1
+    const promptText = "Eres un experto en la NOM-051 de México. Analiza los ingredientes en la imagen para detectar edulcorantes calóricos. Responde ÚNICAMENTE con un objeto JSON con este formato: { \"found\": boolean, \"detectedIngredients\": [], \"productName\": \"\" }";
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
@@ -110,12 +111,10 @@ const App = () => {
         body: JSON.stringify({
           contents: [{
             parts: [
-                { text: "Analyze ingredients for caloric sweeteners per NOM-051." }, 
+                { text: promptText }, 
                 { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
             ]
-          }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: { responseMimeType: "application/json" }
+          }]
         })
       });
 
@@ -125,7 +124,14 @@ const App = () => {
           throw new Error(data.error.message || "Error de la IA");
       }
 
-      const result = JSON.parse(data.candidates[0].content.parts[0].text);
+      // Limpiamos la respuesta por si la IA agrega texto extra fuera del JSON
+      let textResponse = data.candidates[0].content.parts[0].text;
+      const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+          textResponse = jsonMatch[0];
+      }
+
+      const result = JSON.parse(textResponse);
       setAnalysisResult(result);
       
       if (user) {
@@ -142,12 +148,11 @@ const App = () => {
       }
     } catch (err) {
       console.error(err);
-      alert("Error: " + err.message);
+      alert("Error de análisis: " + err.message);
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-24">
       <header className="p-6 border-b border-green-900/20 bg-black/50 backdrop-blur-md sticky top-0 z-50">
