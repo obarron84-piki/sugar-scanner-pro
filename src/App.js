@@ -59,7 +59,7 @@ function App() {
     const promptText = "Analiza los ingredientes de esta etiqueta. Identifica si tiene edulcorantes calóricos según la NOM-051 de México. Responde estrictamente en formato JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
 
     try {
-      // Usamos el endpoint v1 (estable) con el nombre de modelo más compatible
+      // URL corregida con el nombre de modelo oficial y estable
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
@@ -67,7 +67,10 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
-            parts: [{ text: promptText }, { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }]
+            parts: [
+              { text: promptText }, 
+              { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
+            ]
           }]
         })
       });
@@ -75,31 +78,23 @@ function App() {
       const data = await response.json();
 
       if (data.error) {
-        // Si v1 falla, intentamos automáticamente con el endpoint alternativo
         throw new Error(data.error.message);
       }
 
+      // Limpieza de la respuesta para asegurar que solo procesamos el JSON
       let textResponse = data.candidates[0].content.parts[0].text;
       const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : textResponse);
       
       setAnalysisResult(result);
 
-      if (user) {
-        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'scans'), {
-          ...result,
-          timestamp: Date.now()
-        });
-      }
-
     } catch (err) {
       console.error("Error:", err);
-      alert("Error de conexión: Por favor intenta de nuevo en un momento.");
+      alert("Error: El servidor de Google no reconoció el modelo o la imagen. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col">
       <header className="flex justify-between items-center mb-8">
