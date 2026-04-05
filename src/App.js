@@ -44,42 +44,46 @@ function App() {
   };
 
   const executeAnalysis = async (base64Data, mimeType) => {
-    if (!apiKey) { alert("Error: No hay API Key configurada en Vercel."); return; }
+    if (!apiKey) { alert("Error: No hay API Key."); return; }
     setLoading(true);
     setAnalysisResult(null);
 
-    const promptText = "Analiza los ingredientes de esta imagen. Identifica edulcorantes calóricos (azúcares) según la NOM-051 de México. Responde solo JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
-
     try {
-      // URL USANDO LA VERSIÓN MÁS ESTABLE PARA LLAVES DE AI STUDIO
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+      // Usamos el endpoint más básico posible para evitar el 404
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }] }]
+          contents: [{
+            role: "user", // Agregamos el rol explícitamente
+            parts: [
+              { text: "Analiza ingredientes NOM-051 México. Responde solo JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}" },
+              { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
+            ]
+          }]
         })
       });
 
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
+      
+      // Si aquí sale error, el mensaje nos dirá si es la API Key o el Modelo
+      if (data.error) {
+        throw new Error(`${data.error.code}: ${data.error.message}`);
+      }
 
       const rawText = data.candidates[0].content.parts[0].text;
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
-      setAnalysisResult(result);
+      setAnalysisResult(JSON.parse(jsonMatch ? jsonMatch[0] : rawText));
 
-      if (user) {
-        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'scans'), { ...result, timestamp: Date.now() });
-      }
     } catch (err) {
-      alert("Error: " + err.message);
+      // Este alert es clave: si dice "403" es permiso, si dice "429" es cuota
+      alert("Detalle del error: " + err.message);
     } finally {
       setLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col">
       <header className="flex justify-between items-center mb-8">
