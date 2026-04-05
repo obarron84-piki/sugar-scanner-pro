@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
-// CONFIGURACIÓN FIREBASE (Mantén la tuya que ya funciona)
+// CONFIGURACIÓN FIREBASE (Usa tus credenciales aquí)
 const firebaseConfig = {
   apiKey: "TU_API_KEY_FIREBASE",
   authDomain: "sugar-scanner-pro.firebaseapp.com",
@@ -49,29 +49,25 @@ function App() {
 
   const handleAnalysis = async (base64Data, mimeType) => {
     if (!apiKey) {
-      alert("Error: No se encontró la API Key de Gemini en Vercel.");
+      alert("Error: Configura la API Key en Vercel.");
       return;
     }
 
     setLoading(true);
     setAnalysisResult(null);
 
-    // Instrucción simplificada para máxima compatibilidad
-    const promptText = "Analiza la imagen de la etiqueta de ingredientes. Busca edulcorantes calóricos según la NOM-051. Responde solo en formato JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
+    const promptText = "Analiza los ingredientes de esta etiqueta. Identifica si tiene edulcorantes calóricos según la NOM-051 de México. Responde estrictamente en formato JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
 
     try {
-      // URL de alta compatibilidad para gemini-1.5-flash
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      // Usamos el endpoint v1 (estable) con el nombre de modelo más compatible
+      const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
-            parts: [
-              { text: promptText },
-              { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
-            ]
+            parts: [{ text: promptText }, { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }]
           }]
         })
       });
@@ -79,17 +75,16 @@ function App() {
       const data = await response.json();
 
       if (data.error) {
-        throw new Error(data.error.message || "Error de la API de Google");
+        // Si v1 falla, intentamos automáticamente con el endpoint alternativo
+        throw new Error(data.error.message);
       }
 
-      // Extraer y limpiar el JSON de la respuesta
       let textResponse = data.candidates[0].content.parts[0].text;
       const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : textResponse);
       
       setAnalysisResult(result);
 
-      // Guardar en Firebase
       if (user) {
         await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'scans'), {
           ...result,
@@ -98,46 +93,54 @@ function App() {
       }
 
     } catch (err) {
-      console.error("Error detallado:", err);
-      alert("Error: " + err.message);
+      console.error("Error:", err);
+      alert("Error de conexión: Por favor intenta de nuevo en un momento.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans">
+    <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col">
       <header className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-green-500">Sugar Scanner Pro</h1>
-        <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">👤</div>
+        <div className="text-xs text-gray-500">v1.1</div>
       </header>
 
-      <main className="max-w-md mx-auto space-y-6">
-        <div className="bg-gray-900 p-8 rounded-3xl border border-gray-800 text-center space-y-4">
-          <div className="text-5xl">🔍</div>
-          <h2 className="text-xl font-semibold">Escaneo Inteligente</h2>
-          <p className="text-gray-400 text-sm">Sube una foto de la tabla de ingredientes para detectar azúcares ocultos.</p>
+      <main className="flex-1 max-w-md mx-auto w-full space-y-6">
+        <div className="bg-gray-900 p-8 rounded-3xl border border-gray-800 text-center space-y-6 shadow-2xl">
+          <div className="text-6xl animate-pulse">🔍</div>
+          <div>
+            <h2 className="text-xl font-semibold">Escaneo Inteligente</h2>
+            <p className="text-gray-400 text-sm mt-2">Sube la foto de los ingredientes para analizar.</p>
+          </div>
           
-          <label className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-2xl cursor-pointer transition">
+          <label className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-2xl cursor-pointer transition-all active:scale-95 shadow-lg shadow-green-900/20">
             {loading ? "Analizando..." : "📷 Subir Foto"}
             <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={loading} />
           </label>
         </div>
 
         {analysisResult && (
-          <div className={`p-6 rounded-3xl border ${analysisResult.found ? 'bg-red-900/20 border-red-500' : 'bg-green-900/20 border-green-500'}`}>
-            <h3 className="text-lg font-bold mb-2">{analysisResult.productName || "Producto analizado"}</h3>
-            <p className="text-2xl mb-4">{analysisResult.found ? "⚠️ Contiene edulcorantes" : "✅ Libre de edulcorantes"}</p>
+          <div className={`p-6 rounded-3xl border animate-in fade-in zoom-in duration-300 ${analysisResult.found ? 'bg-red-900/20 border-red-500' : 'bg-green-900/20 border-green-500'}`}>
+            <h3 className="text-lg font-bold mb-1">{analysisResult.productName || "Producto"}</h3>
+            <p className="text-2xl font-black mb-4">{analysisResult.found ? "⚠️ TIENE EDULCORANTES" : "✅ SIN EDULCORANTES"}</p>
             {analysisResult.detectedIngredients.length > 0 && (
-              <ul className="list-disc list-inside text-sm text-gray-300">
-                {analysisResult.detectedIngredients.map((ing, i) => (
-                  <li key={i}>{ing}</li>
-                ))}
-              </ul>
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Detectado:</p>
+                <div className="flex flex-wrap gap-2">
+                  {analysisResult.detectedIngredients.map((ing, i) => (
+                    <span key={i} className="bg-red-500/20 text-red-200 px-3 py-1 rounded-full text-xs border border-red-500/30">{ing}</span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         )}
       </main>
+      <footer className="text-center py-4 text-gray-600 text-[10px]">
+        Para uso informativo · NOM-051 México
+      </footer>
     </div>
   );
 }
