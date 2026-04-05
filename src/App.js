@@ -4,20 +4,21 @@ import { getFirestore, collection, addDoc } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
 // 1. CONFIGURACIÓN FIREBASE (Usa tus credenciales aquí)
+// CONFIGURACIÓN FIREBASE REAL
 const firebaseConfig = {
-  apiKey: "TU_API_KEY_FIREBASE",
-  authDomain: "sugar-scanner-pro.firebaseapp.com",
-  projectId: "sugar-scanner-pro",
-  storageBucket: "sugar-scanner-pro.appspot.com",
-  messagingSenderId: "305101234567",
-  appId: "1:305101234567:web:xxxxxxxxxxxx"
+  apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
+  authDomain: "sugar-scanner-piki.firebaseapp.com",
+  projectId: "sugar-scanner-piki",
+  storageBucket: "sugar-scanner-piki.firebasestorage.app",
+  messagingSenderId: "874023944542",
+  appId: "1:874023944542:web:0d787daaf584113dc0cfcf",
+  measurementId: "G-B6B79BZ4P9" // Este es opcional, pero déjalo ahí
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const appId = "sugar-scanner-pro";
-
+const appId = "sugar-scanner-piki";
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
