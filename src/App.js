@@ -56,10 +56,11 @@ function App() {
     setLoading(true);
     setAnalysisResult(null);
 
-    const promptText = "Analiza los ingredientes de esta etiqueta. Identifica si tiene edulcorantes calóricos según la NOM-051 de México. Responde estrictamente en formato JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
+    // Instrucción clara y directa
+    const promptText = "Analiza la imagen de los ingredientes. Busca edulcorantes calóricos según la NOM-051. Responde solo con un JSON: {\"found\": boolean, \"detectedIngredients\": [], \"productName\": \"\"}";
 
     try {
-      // URL corregida con el nombre de modelo oficial y estable
+      // URL estándar y robusta
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
@@ -68,8 +69,13 @@ function App() {
         body: JSON.stringify({
           contents: [{
             parts: [
-              { text: promptText }, 
-              { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
+              { text: promptText },
+              {
+                inlineData: {
+                  mimeType: mimeType || "image/jpeg",
+                  data: base64Data
+                }
+              }
             ]
           }]
         })
@@ -78,10 +84,11 @@ function App() {
       const data = await response.json();
 
       if (data.error) {
-        throw new Error(data.error.message);
+        // Esto nos dirá exactamente qué palabra no le gustó a Google
+        throw new Error(data.error.message || "Error de validación");
       }
 
-      // Limpieza de la respuesta para asegurar que solo procesamos el JSON
+      // Extraemos el texto y limpiamos posibles caracteres extra de la IA
       let textResponse = data.candidates[0].content.parts[0].text;
       const jsonMatch = textResponse.match(/\{[\s\S]*\}/);
       const result = JSON.parse(jsonMatch ? jsonMatch[0] : textResponse);
@@ -89,13 +96,12 @@ function App() {
       setAnalysisResult(result);
 
     } catch (err) {
-      console.error("Error:", err);
-      alert("Error: El servidor de Google no reconoció el modelo o la imagen. Intenta de nuevo.");
+      console.error("Detalle del error:", err);
+      alert("Error de análisis: " + err.message);
     } finally {
       setLoading(false);
     }
-  };
-  return (
+  };  return (
     <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col">
       <header className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-green-500">Sugar Scanner Pro</h1>
