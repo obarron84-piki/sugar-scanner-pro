@@ -1,115 +1,147 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
+// Mantenemos tu config de Firebase que ya funciona
 const firebaseConfig = {
   apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
   authDomain: "sugar-scanner-piki.firebaseapp.com",
   projectId: "sugar-scanner-piki",
   storageBucket: "sugar-scanner-piki.firebasestorage.app",
   messagingSenderId: "874023944542",
-  appId: "1:874023944542:web:0d787daaf584113dc0cfcf",
-  measurementId: "G-B6B79BZ4P9"
+  appId: "1:874023944542:web:0d787daaf584113dc0cfcf"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-const appId = "sugar-scanner-piki";
 
 function App() {
+  const [activeTab, setActiveTab] = useState('scanner');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
+  const [history, setHistory] = useState([]);
   const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      if (u) { setUser(u); } 
-      else { signInAnonymously(auth).catch(console.error); }
+      if (u) { setUser(u); loadHistory(u.uid); } 
+      else { signInAnonymously(auth); }
     });
     return () => unsubscribe();
   }, []);
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      executeAnalysis(reader.result.split(',')[1], file.type);
-    };
-    reader.readAsDataURL(file);
+  const loadHistory = async (uid) => {
+    const q = query(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', uid, 'scans'), orderBy('timestamp', 'desc'), limit(10));
+    const querySnapshot = await getDocs(q);
+    setHistory(querySnapshot.docs.map(doc => doc.data()));
   };
 
   const executeAnalysis = async (base64Data, mimeType) => {
-    if (!apiKey) { alert("Error: No hay API Key en Vercel."); return; }
     setLoading(true);
-    setAnalysisResult(null);
-
-    const promptText = "Analiza ingredientes NOM-051 México. Responde solo JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
-
     try {
-      // AJUSTE CLAVE: Usamos el modelo que te funcionó en el Playground
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }, { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }] }]
+          contents: [{ parts: [{ text: "Analiza ingredientes NOM-051 México. Responde solo JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}" }, { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }] }]
         })
       });
-
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-
       const rawText = data.candidates[0].content.parts[0].text;
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      const result = JSON.parse(jsonMatch ? jsonMatch[0] : rawText);
-      setAnalysisResult(result);
-
+      const result = JSON.parse(rawText.match(/\{[\s\S]*\}/)[0]);
+      
       if (user) {
-        await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'scans'), { ...result, timestamp: Date.now() });
+        await addDoc(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', user.uid, 'scans'), { ...result, timestamp: Date.now() });
+        loadHistory(user.uid);
       }
-    } catch (err) {
-      alert("Error: " + err.message);
-    } finally {
-      setLoading(false);
-    }
+      alert(result.found ? "⚠️ Contiene Azúcar" : "✅ Libre de Azúcar");
+    } catch (e) { alert("Error: " + e.message); }
+    finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-sans flex flex-col">
-      <header className="flex justify-between items-center mb-8">
-        <h1 className="text-2xl font-bold text-green-500">Sugar Scanner Pro</h1>
-        <div className="text-[10px] text-green-400 bg-green-900/30 px-2 py-1 rounded border border-green-500/50">
-          v1.9 (GEMINI 3 READY)
-        </div>
+    <div className="min-h-screen bg-black text-white pb-20 font-sans">
+      {/* HEADER */}
+      <header className="p-4 border-b border-gray-800 flex justify-between items-center bg-black sticky top-0 z-10">
+        <h1 className="text-xl font-bold text-green-500">Sugar Scanner</h1>
+        <span className="text-[10px] bg-gray-800 px-2 py-1 rounded text-gray-400">v2.0 PRO</span>
       </header>
 
-      <main className="flex-1 max-w-md mx-auto w-full space-y-6">
-        <div className="bg-gray-900 p-8 rounded-3xl border border-gray-800 text-center space-y-6 shadow-2xl">
-          <div className="text-6xl">📸</div>
-          <h2 className="text-xl font-semibold">Escanear Producto</h2>
-          <label className="block w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-2xl cursor-pointer shadow-lg active:scale-95 transition-all">
-            {loading ? "ANALIZANDO..." : "TOMAR FOTO"}
-            <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={loading} />
-          </label>
-        </div>
-
-        {analysisResult && (
-          <div className={`p-6 rounded-3xl border animate-in fade-in duration-500 ${analysisResult.found ? 'bg-red-900/20 border-red-500' : 'bg-green-900/20 border-green-500'}`}>
-            <h3 className="text-lg font-bold mb-1 text-center">{analysisResult.productName}</h3>
-            <p className="text-2xl font-black mb-4 text-center">{analysisResult.found ? "⚠️ CONTIENE AZÚCAR" : "✅ LIBRE DE AZÚCAR"}</p>
-            <div className="flex flex-wrap gap-2 justify-center border-t border-white/10 pt-4">
-              {analysisResult.detectedIngredients.map((ing, i) => (
-                <span key={i} className="bg-red-500/20 text-red-200 px-3 py-1 rounded-full text-xs border border-red-500/30">{ing}</span>
-              ))}
+      {/* CONTENIDO SEGÚN TABS */}
+      <main className="p-6 max-w-md mx-auto">
+        {activeTab === 'scanner' && (
+          <div className="space-y-6 text-center">
+            <div className="bg-gray-900 p-10 rounded-3xl border border-gray-800 shadow-xl">
+              <div className="text-6xl mb-4">📸</div>
+              <h2 className="text-xl font-bold mb-4">Analizador NOM-051</h2>
+              <label className="block w-full bg-green-600 p-4 rounded-2xl font-bold cursor-pointer active:scale-95 transition-transform">
+                {loading ? "PROCESANDO..." : "ESCANEAR ETIQUETA"}
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => executeAnalysis(reader.result.split(',')[1], e.target.files[0].type);
+                  reader.readAsDataURL(e.target.files[0]);
+                }} />
+              </label>
             </div>
           </div>
         )}
+
+        {activeTab === 'history' && (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold">Historial Reciente</h2>
+            {history.map((item, i) => (
+              <div key={i} className="bg-gray-900 p-4 rounded-2xl border border-gray-800 flex justify-between items-center">
+                <div>
+                  <p className="font-bold">{item.productName || "Producto"}</p>
+                  <p className="text-xs text-gray-500">{new Date(item.timestamp).toLocaleDateString()}</p>
+                </div>
+                <span className={item.found ? "text-red-500" : "text-green-500"}>
+                  {item.found ? "⚠️ Azúcar" : "✅ Limpio"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeTab === 'social' && (
+          <div className="text-center py-10">
+            <div className="text-5xl mb-4">🌍</div>
+            <h2 className="text-xl font-bold">Comunidad</h2>
+            <p className="text-gray-400 mt-2">Próximamente: Comparte tus hallazgos con otros usuarios y pacientes de Luisa.</p>
+          </div>
+        )}
+
+        {activeTab === 'payment' && (
+          <div className="bg-blue-900/20 border border-blue-500/50 p-6 rounded-3xl text-center">
+            <div className="text-5xl mb-4">💳</div>
+            <h2 className="text-xl font-bold text-blue-400">Acceso Premium</h2>
+            <p className="text-sm text-gray-300 mt-2 mb-6">Desbloquea escaneos ilimitados y asesoría directa.</p>
+            <button className="w-full bg-blue-600 p-4 rounded-2xl font-bold opacity-50 cursor-not-allowed">
+              PAGAR CON MERCADO PAGO
+            </button>
+            <p className="text-[10px] text-gray-500 mt-4">Integración en proceso...</p>
+          </div>
+        )}
       </main>
+
+      {/* NAVEGACIÓN INFERIOR */}
+      <nav className="fixed bottom-0 w-full bg-gray-950 border-t border-gray-800 flex justify-around p-3 backdrop-blur-lg">
+        <button onClick={() => setActiveTab('scanner')} className={`flex flex-col items-center ${activeTab === 'scanner' ? 'text-green-500' : 'text-gray-500'}`}>
+          <span className="text-xl">🔍</span><span className="text-[10px]">Escanear</span>
+        </button>
+        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center ${activeTab === 'history' ? 'text-green-500' : 'text-gray-500'}`}>
+          <span className="text-xl">📜</span><span className="text-[10px]">Historial</span>
+        </button>
+        <button onClick={() => setActiveTab('social')} className={`flex flex-col items-center ${activeTab === 'social' ? 'text-green-500' : 'text-gray-500'}`}>
+          <span className="text-xl">👥</span><span className="text-[10px]">Social</span>
+        </button>
+        <button onClick={() => setActiveTab('payment')} className={`flex flex-col items-center ${activeTab === 'payment' ? 'text-green-500' : 'text-gray-500'}`}>
+          <span className="text-xl">💎</span><span className="text-[10px]">Premium</span>
+        </button>
+      </nav>
     </div>
   );
 }
