@@ -60,7 +60,7 @@ function App() {
     const promptText = "Analiza los ingredientes en esta imagen. Identifica si contiene edulcorantes calóricos según la NOM-051 de México. Responde exclusivamente en formato JSON: {\"found\": boolean, \"detectedIngredients\": [string], \"productName\": string}";
 
     try {
-      // URL ESTABLE V1 - Sin 'beta' para evitar el error 'not found'
+      // 1. Probamos con la URL de producción (v1) y el nombre de modelo más estable
       const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
       const response = await fetch(url, {
@@ -80,7 +80,6 @@ function App() {
           }]
         })
       });
-
       const data = await response.json();
 
       if (data.error) {
