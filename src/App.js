@@ -4,10 +4,10 @@ import {
   History, Users, CreditCard, LogOut, ShieldAlert, Zap 
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, onSnapshot } from 'firebase/firestore';
 
-// CONFIGURACIÓN REAL DE FIREBASE (PROPORCIONADA POR EL USUARIO)
+// CONFIGURACIÓN DE FIREBASE
 const firebaseConfig = {
   apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
   authDomain: "sugar-scanner-piki.firebaseapp.com",
@@ -31,7 +31,9 @@ const App = () => {
   const [communityPosts, setCommunityPosts] = useState([]);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [apiKey] = useState(""); // La API Key de Google se configurará en Vercel después
+
+  // IMPORTANTE: Jala la llave de las variables de entorno de Vercel
+  const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
 
   useEffect(() => {
     const initAuth = async () => {
@@ -51,23 +53,17 @@ const App = () => {
 
   useEffect(() => {
     if (!user) return;
-
     const historyRef = collection(db, 'artifacts', appId, 'users', user.uid, 'scans');
     const unsubHistory = onSnapshot(historyRef, (snapshot) => {
       const scans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setHistory(scans.sort((a, b) => b.timestamp - a.timestamp));
-    }, (err) => console.error("History listener error:", err));
-
+    });
     const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_scans');
     const unsubCommunity = onSnapshot(communityRef, (snapshot) => {
       const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setCommunityPosts(posts.sort((a, b) => b.timestamp - a.timestamp));
-    }, (err) => console.error("Community listener error:", err));
-
-    return () => {
-      unsubHistory();
-      unsubCommunity();
-    };
+    });
+    return () => { unsubHistory(); unsubCommunity(); };
   }, [user]);
 
   const checkUserSubscription = async (uid) => {
@@ -81,11 +77,7 @@ const App = () => {
       const initialData = {
         uid,
         email: 'Usuario Beta',
-        subscription: {
-          type: 'trial',
-          expiresAt: trialEnd.getTime(),
-          isVip: false
-        }
+        subscription: { type: 'trial', expiresAt: trialEnd.getTime(), isVip: false }
       };
       await setDoc(userDocRef, initialData);
       setSubscriptionStatus(initialData.subscription);
@@ -95,18 +87,17 @@ const App = () => {
   const processImage = (file) => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => handleAnalysis(ev.target.result.split(',')[1]);
+    reader.onload = (ev) => handleAnalysis(ev.target.result.split(',')[1], file.type);
     reader.readAsDataURL(file);
   };
 
-  const handleAnalysis = async (base64Data) => {
+  const handleAnalysis = async (base64Data, mimeType) => {
     if (!subscriptionStatus) return;
-    
-    if (subscriptionStatus.type === 'trial' && Date.now() > subscriptionStatus.expiresAt) {
-      setView('subscription');
-      return;
+    if (!apiKey) {
+        alert("Falta la API Key en Vercel (REACT_APP_GEMINI_API_KEY)");
+        return;
     }
-
+    
     setLoading(true);
     setAnalysisResult(null);
 
@@ -118,7 +109,10 @@ const App = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{
-            parts: [{ text: "Analyze ingredients for caloric sweeteners per NOM-051." }, { inlineData: { mimeType: "image/png", data: base64Data } }]
+            parts: [
+                { text: "Analyze ingredients for caloric sweeteners per NOM-051." }, 
+                { inlineData: { mimeType: mimeType || "image/jpeg", data: base64Data } }
+            ]
           }],
           systemInstruction: { parts: [{ text: systemPrompt }] },
           generationConfig: { responseMimeType: "application/json" }
@@ -126,6 +120,11 @@ const App = () => {
       });
 
       const data = await response.json();
+      
+      if (data.error) {
+          throw new Error(data.error.message || "Error de la IA");
+      }
+
       const result = JSON.parse(data.candidates[0].content.parts[0].text);
       setAnalysisResult(result);
       
@@ -143,6 +142,7 @@ const App = () => {
       }
     } catch (err) {
       console.error(err);
+      alert("Error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -173,12 +173,6 @@ const App = () => {
                   <input type="file" className="hidden" accept="image/*" onChange={(e) => processImage(e.target.files[0])} />
                 </label>
               </div>
-            </div>
-            <div className="bg-green-950/10 border border-green-500/20 p-4 rounded-2xl flex gap-3 italic">
-              <ShieldAlert className="text-green-500 flex-shrink-0" size={16} />
-              <p className="text-[10px] text-green-200/60 uppercase leading-relaxed font-bold tracking-tight">
-                Información basada en los criterios de la NOM-051. Referencia informativa únicamente.
-              </p>
             </div>
           </div>
         )}
