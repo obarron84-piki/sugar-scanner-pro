@@ -105,7 +105,7 @@ const App = () => {
     const promptText = "Eres un experto en la NOM-051 de México. Analiza los ingredientes en la imagen para detectar edulcorantes calóricos. Responde ÚNICAMENTE con un objeto JSON con este formato: { \"found\": boolean, \"detectedIngredients\": [], \"productName\": \"\" }";
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
