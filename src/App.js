@@ -3,7 +3,6 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
-// Tu configuración de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
   authDomain: "sugar-scanner-piki.firebaseapp.com",
@@ -39,7 +38,26 @@ function App() {
   const analyzeImage = async (base64, type) => {
     setLoading(true);
     setResult(null);
-    const prompt = "Analiza según NOM-051 México. Responde solo JSON: {'productName': string, 'hasSugar': boolean, 'seals': [string], 'warning': string, 'ingredients': [string]}";
+    
+    // Prompt optimizado con la info del PDF NOM-051
+    const prompt = `Actúa como un experto en nutrición y NOM-051. Analiza la lista de ingredientes de la imagen.
+    REGLA DE ORO: Si alguno de los siguientes ingredientes aparece entre los PRIMEROS 3 de la lista, el veredicto es "NO SE PUEDE". De lo contrario es "SÍ SE PUEDE".
+    
+    LISTA NEGRA (Azúcares añadidos):
+    1. Azúcares: blanca, refinada, morena, mascabado, estándar, de caña, remolacha, coco, dátil, invertido.
+    2. Jarabes: JMAF, maíz, agave, malta, arce, arroz integral, melaza, piloncillo.
+    3. Terminados en "-osa": Glucosa, Fructosa, Sacarosa, Dextrosa, Maltosa, Galactosa, Lactosa.
+    4. Almidones: Extracto de malta, Maltodextrina, Sólidos de maíz, Dextrina, Almidón hidrolizado.
+    5. Concentrados: Jugo de fruta, Néctar.
+
+    Responde solo JSON: 
+    {
+      "productName": "nombre",
+      "verdict": "SÍ SE PUEDE" o "NO SE PUEDE",
+      "foundBadIngredients": ["ingrediente1", "ingrediente2"],
+      "nutritionalExplanation": "breve explicación de por qué no se recomiendan esos ingredientes específicos encontrados",
+      "isTopThree": boolean
+    }`;
     
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
@@ -54,22 +72,21 @@ function App() {
       
       setResult(cleanJson);
       if (user) await addDoc(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', user.uid, 'scans'), { ...cleanJson, timestamp: Date.now() });
-    } catch (e) { alert("Error de análisis: " + e.message); }
+    } catch (e) { alert("Error: " + e.message); }
     setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans pb-24">
-      {/* 1. SECCIÓN PRINCIPAL (SCANNER) */}
       {tab === 'scanner' && (
-        <div className="p-6 animate-in fade-in duration-500">
+        <div className="p-6">
           <h1 className="text-3xl font-black text-green-500 mb-2">Sugar Scanner</h1>
-          <p className="text-gray-400 mb-8">Validación NOM-051 Zapopan, Jal.</p>
+          <p className="text-gray-400 mb-8 font-medium">Validación NOM-051 • Guía de Luisa</p>
 
-          <div className="bg-slate-900 border-2 border-dashed border-slate-800 rounded-3xl p-10 text-center mb-6">
-            <div className="text-5xl mb-4">📸</div>
-            <label className="bg-green-600 hover:bg-green-500 px-8 py-4 rounded-2xl font-bold cursor-pointer transition-all inline-block">
-              {loading ? "ANALIZANDO..." : "ESCANEAR AHORA"}
+          <div className="bg-slate-900 border-2 border-dashed border-slate-700 rounded-3xl p-10 text-center mb-8 shadow-2xl">
+            <div className="text-6xl mb-6">📸</div>
+            <label className="bg-green-600 hover:bg-green-500 px-10 py-5 rounded-2xl font-black cursor-pointer transition-all inline-block shadow-lg active:scale-95">
+              {loading ? "ANALIZANDO..." : "ESCANEAR ETIQUETA"}
               <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                 const f = e.target.files[0];
                 const r = new FileReader();
@@ -80,60 +97,58 @@ function App() {
           </div>
 
           {result && (
-            <div className={`p-6 rounded-3xl border-2 ${result.hasSugar ? 'border-red-500 bg-red-950/20' : 'border-green-500 bg-green-950/20'}`}>
-              <h2 className="text-xl font-bold mb-2">{result.productName}</h2>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {result.seals.map(s => <span className="bg-black text-white text-[10px] px-2 py-1 border border-white font-bold">{s}</span>)}
+            <div className={`p-8 rounded-3xl border-4 animate-in zoom-in duration-300 ${result.verdict === 'SÍ SE PUEDE' ? 'border-green-500 bg-green-950/20' : 'border-red-600 bg-red-950/30'}`}>
+              <h2 className="text-2xl font-black mb-1">{result.verdict}</h2>
+              <p className="text-lg font-bold text-gray-300 mb-4">{result.productName}</p>
+              
+              {result.foundBadIngredients.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Ingredientes detectados:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {result.foundBadIngredients.map((ing, i) => (
+                      <span key={i} className="bg-black/50 px-3 py-1 rounded-full text-sm border border-white/20">{ing}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              <div className="pt-4 border-t border-white/10">
+                <p className="text-sm leading-relaxed text-gray-200">
+                  <span className="font-bold text-yellow-500">¿Por qué? </span> 
+                  {result.nutritionalExplanation}
+                </p>
               </div>
-              <p className="text-sm italic">{result.warning}</p>
             </div>
           )}
         </div>
       )}
 
-      {/* 2. HISTÓRICO */}
       {tab === 'history' && (
         <div className="p-6">
-          <h2 className="text-2xl font-bold mb-6">Mis Escaneos</h2>
-          <div className="space-y-4">
+          <h2 className="text-2xl font-bold mb-6 text-green-500">Historial de Luisa</h2>
+          <div className="space-y-3">
             {history.map((h, i) => (
-              <div key={i} className="bg-slate-900 p-4 rounded-2xl flex justify-between items-center">
-                <span>{h.productName}</span>
-                <span className={h.hasSugar ? 'text-red-400' : 'text-green-400'}>{h.hasSugar ? '⚠️' : '✅'}</span>
+              <div key={i} className="bg-slate-900 p-5 rounded-2xl flex justify-between items-center border border-slate-800">
+                <div>
+                  <p className="font-bold">{h.productName}</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-tighter">
+                    {new Date(h.timestamp).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className={`font-black text-xs px-3 py-1 rounded-lg ${h.verdict === 'SÍ SE PUEDE' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {h.verdict}
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* 3. SOCIAL */}
-      {tab === 'social' && (
-        <div className="p-6 text-center">
-          <div className="text-6xl mt-20">👥</div>
-          <h2 className="text-2xl font-bold mt-4 text-green-400 text-center">Comunidad Luisa</h2>
-          <p className="text-gray-400 mt-2">Comparte tus hallazgos con otros pacientes de la consulta nutricional.</p>
-        </div>
-      )}
-
-      {/* 4. PAGOS (MERCADO PAGO) */}
-      {tab === 'pay' && (
-        <div className="p-6">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 rounded-3xl shadow-xl text-center">
-            <h2 className="text-2xl font-bold mb-4">Plan Premium</h2>
-            <p className="mb-6 opacity-90 text-sm">Escaneos ilimitados y reporte PDF para tu nutrióloga.</p>
-            <button className="bg-white text-blue-600 w-full py-4 rounded-2xl font-black text-lg">
-              PAGAR CON MERCADO PAGO
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* NAVEGACIÓN INFERIOR */}
-      <nav className="fixed bottom-0 w-full bg-slate-900/80 backdrop-blur-md border-t border-slate-800 flex justify-around p-4">
-        <button onClick={() => setTab('scanner')} className={tab === 'scanner' ? 'text-green-500' : 'text-slate-500'}>📸</button>
-        <button onClick={() => setTab('history')} className={tab === 'history' ? 'text-green-500' : 'text-slate-500'}>📜</button>
-        <button onClick={() => setTab('social')} className={tab === 'social' ? 'text-green-500' : 'text-slate-500'}>🌍</button>
-        <button onClick={() => setTab('pay')} className={tab === 'pay' ? 'text-green-500' : 'text-slate-500'}>💳</button>
+      <nav className="fixed bottom-0 w-full bg-slate-900/90 backdrop-blur-xl border-t border-slate-800 flex justify-around p-5 shadow-2xl">
+        <button onClick={() => setTab('scanner')} className={`text-2xl transition-all ${tab === 'scanner' ? 'text-green-500 scale-125' : 'text-slate-500'}`}>📸</button>
+        <button onClick={() => setTab('history')} className={`text-2xl transition-all ${tab === 'history' ? 'text-green-500 scale-125' : 'text-slate-500'}`}>📜</button>
+        <button onClick={() => setTab('social')} className={`text-2xl transition-all ${tab === 'social' ? 'text-green-500 scale-125' : 'text-slate-500'}`}>🌍</button>
+        <button onClick={() => setTab('pay')} className={`text-2xl transition-all ${tab === 'pay' ? 'text-green-500 scale-125' : 'text-slate-500'}`}>💳</button>
       </nav>
     </div>
   );
