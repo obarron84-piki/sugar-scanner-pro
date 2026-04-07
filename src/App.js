@@ -52,22 +52,17 @@ function App() {
   }, []);
 
   // FUNCIÓN DE PAGO INTEGRADA
-  const handlePayment = async () => {
-    setLoading(true);
-    try {
-      // En una app real, aquí llamarías a tu backend para crear la preferencia.
-      // Para efectos de prototipo, usamos el Checkout Pro de Mercado Pago.
-      const mp = new window.MercadoPago(MP_PUBLIC_KEY, { locale: 'es-MX' });
-      
-      // Simulación de creación de preferencia (Esto suele hacerse en un server-side)
-      // Por ahora, te dirigirá al flujo de pago estándar con el monto configurado.
-      alert(`Iniciando pago de $${appliedPrice} MXN...`);
-      
-      // Aquí deberías integrar tu URL de Checkout generada por tu backend de Mercado Pago
-      // Ejemplo: window.location.href = "https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=TU_PREF_ID";
-      
-      // Como estamos en ambiente de pruebas, simulamos el éxito para que veas el flujo:
-      console.log("Redirigiendo a checkout con precio:", appliedPrice);
+  const handlePayment = () => {
+    // Definimos los links manuales que creaste en MP
+    const LINK_PUBLICO = "TU_LINK_DE_199_AQUI";
+    const LINK_CUPON = "TU_LINK_DE_149_AQUI";
+
+    // Si el precio aplicado es 149, usamos el link de descuento
+    const urlFinal = appliedPrice === 149 ? LINK_CUPON : LINK_PUBLICO;
+
+    // Redirigimos al usuario a Mercado Pago
+    window.location.href = urlFinal;
+  };
       
     } catch (error) {
       console.error("Error en MP:", error);
