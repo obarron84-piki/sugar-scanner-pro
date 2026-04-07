@@ -54,8 +54,8 @@ function App() {
   // FUNCIÓN DE PAGO INTEGRADA
   const handlePayment = () => {
     // Definimos los links manuales que creaste en MP
-    const LINK_PUBLICO = "TU_LINK_DE_199_AQUI";
-    const LINK_CUPON = "TU_LINK_DE_149_AQUI";
+    const LINK_PUBLICO = "https://mpago.la/2Hr2hye";
+    const LINK_CUPON = "https://mpago.la/1BTpQev";
 
     // Si el precio aplicado es 149, usamos el link de descuento
     const urlFinal = appliedPrice === 149 ? LINK_CUPON : LINK_PUBLICO;
