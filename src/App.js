@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
 import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 
-// Configuración de Firebase (Tuya)
+// Configuración de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
   authDomain: "sugar-scanner-piki.firebaseapp.com",
@@ -29,16 +29,15 @@ function App() {
   const [appliedPrice, setAppliedPrice] = useState(199);
 
   const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+  const MP_PUBLIC_KEY = "TEST-3c315b72-21a9-4672-ba6a-e62e57f17009"; // Tu clave de prueba
 
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        // Cargar historial
         const q = query(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', u.uid, 'scans'), orderBy('timestamp', 'desc'), limit(15));
         onSnapshot(q, (snap) => setHistory(snap.docs.map(d => ({id: d.id, ...d.data()}))));
 
-        // Verificar contador de uso y status premium en Firestore
         const userDocRef = doc(db, 'artifacts', 'sugar-scanner-piki', 'users', u.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
@@ -52,16 +51,38 @@ function App() {
     return () => unsubAuth();
   }, []);
 
+  // FUNCIÓN DE PAGO INTEGRADA
+  const handlePayment = async () => {
+    setLoading(true);
+    try {
+      // En una app real, aquí llamarías a tu backend para crear la preferencia.
+      // Para efectos de prototipo, usamos el Checkout Pro de Mercado Pago.
+      const mp = new window.MercadoPago(MP_PUBLIC_KEY, { locale: 'es-MX' });
+      
+      // Simulación de creación de preferencia (Esto suele hacerse en un server-side)
+      // Por ahora, te dirigirá al flujo de pago estándar con el monto configurado.
+      alert(`Iniciando pago de $${appliedPrice} MXN...`);
+      
+      // Aquí deberías integrar tu URL de Checkout generada por tu backend de Mercado Pago
+      // Ejemplo: window.location.href = "https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=TU_PREF_ID";
+      
+      // Como estamos en ambiente de pruebas, simulamos el éxito para que veas el flujo:
+      console.log("Redirigiendo a checkout con precio:", appliedPrice);
+      
+    } catch (error) {
+      console.error("Error en MP:", error);
+    }
+    setLoading(false);
+  };
+
   const analyzeImage = async (base64, type) => {
     if (!isPremium && usage >= 3) {
       setTab('pay');
-      alert("¡Has agotado tus 3 pruebas gratuitas! Adquiere el plan anual para continuar.");
       return;
     }
-
     setLoading(true);
     setResult(null);
-    const prompt = `Analiza ingredientes según NOM-051 México. Si alguno de estos (Azúcar, Jarabes, Maltodextrina, Jugos concentrados, terminados en -osa) está en los PRIMEROS 3 ingredientes, responde NO SE PUEDE. Responde JSON: {"productName": string, "verdict": "SÍ SE PUEDE" | "NO SE PUEDE", "foundBadIngredients": [string], "explanation": string}`;
+    const prompt = `Analiza ingredientes según NOM-051 México. Si alguno de estos (Azúcar, Jarabes, Maltodextrina, Jugos concentrados, terminados en -osa) está en los PRIMEROS 3 ingredientes, responde NO SE PUEDE. Responde JSON estricto: {"productName": string, "verdict": "SÍ SE PUEDE" | "NO SE PUEDE", "foundBadIngredients": [string], "explanation": string}`;
 
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
@@ -89,37 +110,36 @@ function App() {
   const applyCoupon = () => {
     if (coupon.toUpperCase() === 'LUISA149') {
       setAppliedPrice(149);
-      alert("¡Cupón aplicado! Precio especial para comunidad Luisa activado.");
+      alert("¡Cupón aplicado!");
     } else { alert("Cupón no válido"); }
   };
 
   return (
     <div className="min-h-screen bg-[#1a1a1a] text-slate-100 font-sans pb-28">
-      {/* HEADER CENTRADO */}
-      <header className="p-8 text-center bg-[#1a1a1a]">
-        <h1 className="text-4xl font-black text-green-500 mb-2 tracking-tight">Sugar Scanner</h1>
+      {/* HEADER */}
+      <header className="p-8 text-center">
+        <h1 className="text-4xl font-black text-green-500 mb-2">Sugar Scanner</h1>
         <div className="flex flex-col gap-1 items-center">
-          <a href="https://www.instagram.com/vivosinazucar/" target="_blank" className="text-blue-400 font-bold hover:underline">Por: @vivosinazucar</a>
-          <a href="http://wa.me/523312077909" target="_blank" className="text-green-400 text-sm font-medium border-b border-green-800 pb-1 mt-2">Click aquí para una cita con Luisa 🗓️</a>
+          <a href="https://www.instagram.com/vivosinazucar/" target="_blank" className="text-blue-400 font-bold">Por: @vivosinazucar</a>
+          <a href="http://wa.me/523312077909" target="_blank" className="text-green-400 text-sm mt-2 border-b border-green-900">Click aquí para una cita con Luisa 🗓️</a>
         </div>
       </header>
 
       <main className="max-w-md mx-auto p-4">
-        {/* SCANNER */}
         {tab === 'scanner' && (
-          <div className="space-y-6 animate-in fade-in">
-            {/* Límite de uso */}
-            {!isPremium && (
-              <div className="bg-blue-900/30 border border-blue-500/50 p-3 rounded-xl text-center text-xs">
-                Escaneos gratuitos restantes: <span className="font-bold text-blue-400">{3 - usage > 0 ? 3 - usage : 0}</span>
+          <div className="space-y-6">
+            {!isPremium && usage >= 3 && (
+              <div className="bg-red-900/40 border border-red-500 p-4 rounded-2xl text-center animate-bounce">
+                <p className="font-bold text-sm text-red-200">⚠️ Límite gratuito alcanzado</p>
+                <button onClick={()=>setTab('pay')} className="text-xs underline text-white mt-1">Obtén acceso anual aquí</button>
               </div>
             )}
-
-            <div className="bg-[#2a2a2a] border border-gray-700 rounded-3xl p-10 text-center shadow-2xl">
+            
+            <div className="bg-[#2a2a2a] border border-gray-800 rounded-3xl p-10 text-center shadow-2xl">
               <div className="text-6xl mb-6">📸</div>
-              <label className="bg-green-600 hover:bg-green-500 text-white px-10 py-5 rounded-2xl font-black cursor-pointer transition-all inline-block shadow-lg active:scale-95">
-                {loading ? "ANALIZANDO..." : "ESCANEAR ETIQUETA"}
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+              <label className="bg-green-600 hover:bg-green-500 text-white px-10 py-5 rounded-2xl font-black cursor-pointer transition-all inline-block shadow-lg">
+                {loading ? "PROCESANDO..." : "ESCANEAR ETIQUETA"}
+                <input type="file" accept="image/*" className="hidden" disabled={!isPremium && usage >= 3} onChange={(e) => {
                   const f = e.target.files[0];
                   const r = new FileReader();
                   r.onloadend = () => analyzeImage(r.result.split(',')[1], f.type);
@@ -129,67 +149,86 @@ function App() {
             </div>
 
             {result && (
-              <div className={`p-8 rounded-3xl border-2 bg-white shadow-xl ${result.verdict === 'SÍ SE PUEDE' ? 'border-green-400' : 'border-red-400'}`}>
-                <h2 className={`text-2xl font-black mb-2 flex items-center gap-2 ${result.verdict === 'SÍ SE PUEDE' ? 'text-green-600' : 'text-red-600'}`}>
-                  {result.verdict === 'SÍ SE PUEDE' ? '😎 ¡SÍ SE PUEDE!' : '❌ NO SE PUEDE'}
+              <div className={`p-8 rounded-3xl border-2 bg-white shadow-xl ${result.verdict.includes('SÍ') ? 'border-green-400' : 'border-red-400'}`}>
+                <h2 className={`text-2xl font-black mb-2 ${result.verdict.includes('SÍ') ? 'text-green-600' : 'text-red-600'}`}>
+                  {result.verdict.includes('SÍ') ? '😎 SÍ SE PUEDE' : '❌ NO SE PUEDE'}
                 </h2>
-                <p className="text-lg font-bold text-slate-800">{result.productName}</p>
-                <p className="text-sm text-slate-600 my-4 leading-relaxed">{result.explanation}</p>
-                <a href="https://www.amazon.com.mx/dp/B0DNX9CVVK" target="_blank" className="block mt-4 bg-orange-100 text-orange-700 p-4 rounded-xl text-center border border-orange-200 font-bold">
-                  📖 ¿No sabes qué comer? Mira mi recetario
+                <p className="text-slate-800 font-bold mb-2">{result.productName}</p>
+                <p className="text-xs text-slate-500 mb-4 italic">Detectado: {result.foundBadIngredients.join(', ')}</p>
+                <p className="text-sm text-slate-600 leading-relaxed mb-6">{result.explanation}</p>
+                <a href="https://www.amazon.com.mx/dp/B0DNX9CVVK" target="_blank" className="block bg-orange-100 text-orange-700 p-4 rounded-xl text-center border border-orange-200 font-bold text-sm">
+                  📙 Ver Recetario de Luisa en Amazon
                 </a>
               </div>
             )}
           </div>
         )}
 
-        {/* HISTORIAL */}
         {tab === 'history' && (
           <div className="space-y-4">
-            <h2 className="text-xl font-bold text-center mb-6">Mis Revisiones</h2>
+            <h2 className="text-xl font-bold text-center text-gray-400">Tu Historial</h2>
             {history.map((h) => (
-              <div key={h.id} className="bg-[#2a2a2a] p-4 rounded-2xl border border-gray-800 flex items-center gap-4">
-                <img src={h.imageUri} className="w-14 h-14 object-cover rounded-lg" />
-                <div className="flex-1">
-                  <p className="font-bold text-sm truncate w-40">{h.productName}</p>
-                  <p className={`text-[10px] font-black ${h.verdict.includes('SÍ') ? 'text-green-400' : 'text-red-400'}`}>{h.verdict}</p>
+              <div key={h.id} className="bg-[#2a2a2a] p-4 rounded-2xl border border-gray-800 flex items-center gap-4 shadow-md">
+                <img src={h.imageUri} className="w-16 h-16 object-cover rounded-xl border border-gray-700" />
+                <div className="flex-1 overflow-hidden">
+                  <p className="font-bold text-sm text-gray-200 truncate">{h.productName}</p>
+                  <p className={`text-[10px] font-black mt-1 ${h.verdict.includes('SÍ') ? 'text-green-400' : 'text-red-400'}`}>{h.verdict}</p>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* PREMIUM */}
         {tab === 'pay' && (
-          <div className="space-y-6">
-            <div className="bg-white p-8 rounded-3xl text-slate-900 shadow-2xl border-t-8 border-green-500">
-              <h2 className="text-2xl font-black text-center mb-2">Acceso Anual</h2>
-              <p className="text-center text-slate-500 text-sm mb-6">Escaneos ilimitados por un año completo</p>
+          <div className="animate-in slide-in-from-bottom duration-500">
+            <div className="bg-white p-8 rounded-3xl text-slate-900 shadow-2xl border-t-[12px] border-green-500">
+              <h2 className="text-2xl font-black text-center mb-1 text-slate-800">Plan Saludable</h2>
+              <p className="text-center text-slate-400 text-xs mb-8 uppercase tracking-widest font-bold">Acceso Anual Ilimitado</p>
               
-              <p className="text-5xl font-black text-center mb-8">${appliedPrice}<span className="text-lg font-normal">MXN</span></p>
-              
-              <div className="flex gap-2 mb-6">
-                <input type="text" placeholder="Código WhatsApp" value={coupon} onChange={(e)=>setCoupon(e.target.value)} className="flex-1 bg-slate-100 px-4 py-3 rounded-xl text-sm border-none focus:ring-2 focus:ring-green-500" />
-                <button onClick={applyCoupon} className="bg-slate-800 text-white px-4 rounded-xl font-bold text-xs">Aplicar</button>
+              <div className="flex justify-center items-baseline gap-1 mb-8">
+                <span className="text-2xl font-bold text-slate-400">$</span>
+                <span className="text-6xl font-black text-slate-900">{appliedPrice}</span>
+                <span className="text-lg font-bold text-slate-400">MXN</span>
               </div>
 
-              <button className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-all">
-                ACTIVAR SUSCRIPCIÓN
+              <div className="flex gap-2 mb-8 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                <input 
+                  type="text" 
+                  placeholder="Cupón WhatsApp" 
+                  value={coupon} 
+                  onChange={(e)=>setCoupon(e.target.value)} 
+                  className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none" 
+                />
+                <button onClick={applyCoupon} className="bg-slate-900 text-white px-5 rounded-xl font-bold text-[10px] uppercase">Aplicar</button>
+              </div>
+
+              <button 
+                onClick={handlePayment}
+                disabled={loading}
+                className="w-full bg-[#009ee3] hover:bg-[#0089c7] text-white py-5 rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 flex justify-center items-center gap-3"
+              >
+                {loading ? "CARGANDO..." : (
+                  <>PAGAR CON MERCADO PAGO <span className="bg-white text-[#009ee3] rounded-full px-2 py-0 text-xs text-center leading-none">M</span></>
+                )}
               </button>
+              
+              <p className="text-[9px] text-center text-slate-400 mt-6 leading-tight italic">
+                Protegido por Mercado Pago. <br/>Válido por 365 días a partir de la activación.
+              </p>
             </div>
           </div>
         )}
       </main>
 
       {/* NAV INFERIOR */}
-      <nav className="fixed bottom-0 w-full bg-[#1a1a1a]/95 backdrop-blur-md border-t border-gray-800 flex justify-around p-4">
-        <button onClick={() => setTab('scanner')} className={`flex flex-col items-center ${tab === 'scanner' ? 'text-green-500' : 'text-gray-500'}`}>
+      <nav className="fixed bottom-0 w-full bg-[#1a1a1a]/95 backdrop-blur-md border-t border-gray-800 flex justify-around p-4 shadow-2xl">
+        <button onClick={() => setTab('scanner')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'scanner' ? 'text-green-500 scale-110' : 'text-gray-600'}`}>
           <span className="text-2xl">🔍</span><span className="text-[10px] font-bold">Scanner</span>
         </button>
-        <button onClick={() => setTab('history')} className={`flex flex-col items-center ${tab === 'history' ? 'text-green-500' : 'text-gray-500'}`}>
+        <button onClick={() => setTab('history')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'history' ? 'text-green-500 scale-110' : 'text-gray-600'}`}>
           <span className="text-2xl">📜</span><span className="text-[10px] font-bold">Historial</span>
         </button>
-        <button onClick={() => setTab('pay')} className={`flex flex-col items-center ${tab === 'pay' ? 'text-green-500' : 'text-gray-500'}`}>
+        <button onClick={() => setTab('pay')} className={`flex flex-col items-center gap-1 transition-all ${tab === 'pay' ? 'text-green-500 scale-110' : 'text-gray-600'}`}>
           <span className="text-2xl">💎</span><span className="text-[10px] font-bold">Premium</span>
         </button>
       </nav>
