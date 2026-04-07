@@ -1,213 +1,225 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot, doc, getDoc, setDoc, updateDoc, increment } from "firebase/firestore";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+<!DOCTYPE html>
 
-// 1. Configuración de Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyAsOVe0tGXGUOUAnYE65N6RVLIIeqndAiQ",
-  authDomain: "sugar-scanner-piki.firebaseapp.com",
-  projectId: "sugar-scanner-piki",
-  storageBucket: "sugar-scanner-piki.firebasestorage.app",
-  messagingSenderId: "874023944542",
-  appId: "1:874023944542:web:0d787daaf584113dc0cfcf"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-function App() {
-  const [tab, setTab] = useState('scanner');
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [history, setHistory] = useState([]);
-  const [usage, setUsage] = useState(0);
-  const [isPremium, setIsPremium] = useState(false);
-  const [coupon, setCoupon] = useState("");
-  const [appliedPrice, setAppliedPrice] = useState(199);
-
-  const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
-
-  // 2. Efecto para autenticación y carga de datos
-  useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u);
-        const q = query(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', u.uid, 'scans'), orderBy('timestamp', 'desc'), limit(15));
-        onSnapshot(q, (snap) => setHistory(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-
-        const userDocRef = doc(db, 'artifacts', 'sugar-scanner-piki', 'users', u.uid);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          setUsage(userDoc.data().scanCount || 0);
-          setIsPremium(userDoc.data().isPremium || false);
-        } else {
-          await setDoc(userDocRef, { scanCount: 0, isPremium: false });
-        }
-      } else { signInAnonymously(auth); }
-    });
-    return () => unsubAuth();
-  }, []);
-
-  // 3. Lógica de Escaneo con NOM-051 [cite: 3, 30, 37]
-  const analyzeImage = async (base64, type) => {
-    if (!isPremium && usage >= 3) {
-      setTab('pay');
-      return;
-    }
-    setLoading(true);
-    setResult(null);
-
-    const prompt = `Analiza ingredientes según NOM-051 México. Detecta cualquier azúcar añadida en los PRIMEROS 3 ingredientes[cite: 1, 2], incluyendo:
-    1. Nombres Comunes: Azúcar (blanca, refinada, morena, mascabado, estándar, caña, remolacha, coco, dátil, invertido)[cite: 4, 6, 7, 8, 9, 10].
-    2. Jarabes: Maíz (JMAF), agave, malta, arce, arroz integral, melaza, piloncillo/panela[cite: 11, 13, 14, 15, 16, 17, 18, 19].
-    3. Terminados en "-osa": Glucosa, fructosa, sacarosa, dextrosa, maltosa, galactosa, lactosa[cite: 20, 23, 24, 25, 26, 27, 28, 29].
-    4. Almidones/Extractos: Malta de cebada, maltodextrina, sólidos de maíz, dextrina, almidón hidrolizado[cite: 30, 32, 33, 34, 35, 36].
-    5. Concentrados: Jugo de fruta (manzana, uva, pera) o néctar[cite: 37, 39].
-    
-    REGLA: Si alguno aparece en los lugares 1, 2 o 3, responde NO SE PUEDE.
-    Responde JSON: {"productName": string, "verdict": "SÍ SE PUEDE" | "NO SE PUEDE", "foundBadIngredients": [string], "explanation": string}`;
-
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inlineData: { mimeType: type, data: base64 } }] }] })
-      });
-      const data = await res.json();
-      const cleanJson = JSON.parse(data.candidates[0].content.parts[0].text.match(/\{[\s\S]*\}/)[0]);
-      
-      const scanData = { ...cleanJson, timestamp: Date.now(), imageUri: `data:${type};base64,${base64}` };
-      setResult(scanData);
-
-      if (user) {
-        await addDoc(collection(db, 'artifacts', 'sugar-scanner-piki', 'users', user.uid, 'scans'), scanData);
-        await updateDoc(doc(db, 'artifacts', 'sugar-scanner-piki', 'users', user.uid), { scanCount: increment(1) });
-        setUsage(prev => prev + 1);
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vitality - Sugar Scanner</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts: Manrope & Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Manrope:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-variant": "#dedce3",
+                    "background": "#f8f5fb",
+                    "primary-fixed-dim": "#90e28a",
+                    "on-surface": "#2e2e32",
+                    "surface-container-highest": "#dedce3",
+                    "tertiary-fixed-dim": "#ecb200",
+                    "error-dim": "#b92902",
+                    "surface-bright": "#f8f5fb",
+                    "outline-variant": "#aeacb1",
+                    "on-primary-container": "#005c15",
+                    "surface-container-low": "#f2eff6",
+                    "error-container": "#f95630",
+                    "primary-fixed": "#9df197",
+                    "secondary": "#b5161e",
+                    "tertiary": "#755700",
+                    "on-surface-variant": "#5c5b60",
+                    "secondary-fixed": "#ffc3bd",
+                    "tertiary-dim": "#664b00",
+                    "on-tertiary-container": "#553e00",
+                    "secondary-container": "#ffc3bd",
+                    "on-background": "#2e2e32",
+                    "outline": "#77767b",
+                    "primary": "#176a21",
+                    "error": "#b02500",
+                    "surface-tint": "#176a21",
+                    "primary-container": "#9df197",
+                    "on-secondary-fixed-variant": "#a50314",
+                    "on-secondary-fixed": "#700009",
+                    "on-primary-fixed-variant": "#12661e",
+                    "surface": "#f8f5fb",
+                    "surface-container-high": "#e4e1e8",
+                    "on-error-container": "#520c00",
+                    "on-primary-fixed": "#00460e",
+                    "on-secondary": "#ffefed",
+                    "on-tertiary": "#fff1db",
+                    "on-tertiary-fixed-variant": "#604700",
+                    "primary-dim": "#025d16",
+                    "secondary-fixed-dim": "#ffafa8",
+                    "surface-container": "#eae7ee",
+                    "secondary-dim": "#a40113",
+                    "tertiary-fixed": "#fdc003",
+                    "inverse-primary": "#9df197",
+                    "surface-dim": "#d5d3db",
+                    "on-tertiary-fixed": "#3d2b00",
+                    "on-primary": "#d1ffc8",
+                    "surface-container-lowest": "#ffffff",
+                    "inverse-surface": "#0e0e12",
+                    "on-error": "#ffefec",
+                    "tertiary-container": "#fdc003",
+                    "on-secondary-container": "#940010",
+                    "inverse-on-surface": "#9e9ca1"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": [ "Manrope" ],
+                    "body": [ "Inter" ],
+                    "label": [ "Inter" ]
+            }
+          },
+        },
       }
-    } catch (e) { alert("Error al analizar: " + e.message); }
-    setLoading(false);
-  };
-
-  // 4. Lógica de Pagos
-  const handlePayment = () => {
-    // REEMPLAZA ESTOS LINKS con los que generes en tu panel de Mercado Pago
-    const LINK_199 = "https://mpago.la/tu-link-publico"; 
-    const LINK_149 = "https://mpago.la/tu-link-cupon";
-    
-    window.location.href = appliedPrice === 149 ? LINK_149 : LINK_199;
-  };
-
-  const applyCoupon = () => {
-    if (coupon.toUpperCase() === 'LUISA149') {
-      setAppliedPrice(149);
-      alert("¡Cupón aplicado con éxito!");
-    } else { alert("Cupón no válido"); }
-  };
-
-  return (
-    <div className="min-h-screen bg-[#1a1a1a] text-slate-100 font-sans pb-28">
-      <header className="p-8 text-center">
-        <h1 className="text-4xl font-black text-green-500 mb-2">Sugar Scanner</h1>
-        <div className="flex flex-col gap-1 items-center">
-          <a href="https://www.instagram.com/vivosinazucar/" target="_blank" className="text-blue-400 font-bold hover:underline">Por: @vivosinazucar</a>
-          <a href="http://wa.me/523312077909" target="_blank" className="text-green-400 text-sm mt-2 border-b border-green-900 pb-1">Click para cita con Luisa 🗓️</a>
-        </div>
-      </header>
-
-      <main className="max-w-md mx-auto p-4">
-        {tab === 'scanner' && (
-          <div className="space-y-6">
-            {!isPremium && usage >= 3 && (
-              <div className="bg-red-900/40 border border-red-500 p-4 rounded-2xl text-center">
-                <p className="font-bold text-sm">⚠️ Límite de prueba alcanzado</p>
-                <button onClick={()=>setTab('pay')} className="text-xs underline mt-1">Pásate a Premium para seguir</button>
-              </div>
-            )}
-            
-            <div className="bg-[#2a2a2a] border border-gray-800 rounded-3xl p-10 text-center shadow-2xl">
-              <div className="text-6xl mb-6">📸</div>
-              <label className="bg-green-600 hover:bg-green-500 text-white px-10 py-5 rounded-2xl font-black cursor-pointer transition-all inline-block shadow-lg active:scale-95">
-                {loading ? "ANALIZANDO..." : "ESCANEAR ETIQUETA"}
-                <input type="file" accept="image/*" className="hidden" disabled={!isPremium && usage >= 3} onChange={(e) => {
-                  const f = e.target.files[0];
-                  const r = new FileReader();
-                  r.onloadend = () => analyzeImage(r.result.split(',')[1], f.type);
-                  r.readAsDataURL(f);
-                }} />
-              </label>
-            </div>
-
-            {result && (
-              <div className={`p-8 rounded-3xl border-2 bg-white shadow-xl ${result.verdict.includes('SÍ') ? 'border-green-400' : 'border-red-400'}`}>
-                <h2 className={`text-2xl font-black mb-2 ${result.verdict.includes('SÍ') ? 'text-green-600' : 'text-red-600'}`}>
-                  {result.verdict.includes('SÍ') ? '😎 SÍ SE PUEDE' : '❌ NO SE PUEDE'}
-                </h2>
-                <p className="text-slate-800 font-bold mb-2">{result.productName}</p>
-                <p className="text-sm text-slate-600 leading-relaxed mb-6">{result.explanation}</p>
-                <a href="https://www.amazon.com.mx/dp/B0DNX9CVVK" target="_blank" className="block bg-orange-100 text-orange-700 p-4 rounded-xl text-center border border-orange-200 font-bold text-sm">
-                  📙 Recetario de Luisa en Amazon
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
-        {tab === 'history' && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-bold text-center text-gray-500">Historial Reciente</h2>
-            {history.map((h) => (
-              <div key={h.id} className="bg-[#2a2a2a] p-4 rounded-2xl border border-gray-800 flex items-center gap-4">
-                <img src={h.imageUri} className="w-16 h-16 object-cover rounded-xl border border-gray-700" alt="scan" />
-                <div className="flex-1 overflow-hidden">
-                  <p className="font-bold text-sm text-gray-200 truncate">{h.productName}</p>
-                  <p className={`text-[10px] font-black mt-1 ${h.verdict.includes('SÍ') ? 'text-green-400' : 'text-red-400'}`}>{h.verdict}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {tab === 'pay' && (
-          <div className="animate-in slide-in-from-bottom duration-500">
-            <div className="bg-white p-8 rounded-3xl text-slate-900 shadow-2xl border-t-[12px] border-green-500">
-              <h2 className="text-2xl font-black text-center mb-1 text-slate-800">Plan Saludable</h2>
-              <p className="text-center text-slate-400 text-[10px] mb-8 uppercase font-bold tracking-widest">Acceso Anual Ilimitado</p>
-              
-              <div className="text-center mb-8">
-                <span className="text-6xl font-black text-slate-900">${appliedPrice}</span>
-                <span className="text-sm font-bold text-slate-400 ml-1">MXN</span>
-              </div>
-
-              <div className="flex gap-2 mb-8 bg-slate-50 p-2 rounded-2xl border border-slate-200">
-                <input type="text" placeholder="Cupón WhatsApp" value={coupon} onChange={(e)=>setCoupon(e.target.value)} className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none" />
-                <button onClick={applyCoupon} className="bg-slate-900 text-white px-5 rounded-xl font-bold text-[10px] uppercase">Aplicar</button>
-              </div>
-
-              <button onClick={handlePayment} className="w-full bg-[#009ee3] text-white py-5 rounded-2xl font-black text-lg shadow-xl active:scale-95 transition-all">
-                PAGAR CON MERCADO PAGO
-              </button>
-            </div>
-          </div>
-        )}
-      </main>
-
-      <nav className="fixed bottom-0 w-full bg-[#1a1a1a]/95 backdrop-blur-md border-t border-gray-800 flex justify-around p-4 shadow-2xl">
-        <button onClick={() => setTab('scanner')} className={`flex flex-col items-center gap-1 ${tab === 'scanner' ? 'text-green-500' : 'text-gray-600'}`}>
-          <span className="text-2xl">🔍</span><span className="text-[10px] font-bold">Scanner</span>
-        </button>
-        <button onClick={() => setTab('history')} className={`flex flex-col items-center gap-1 ${tab === 'history' ? 'text-green-500' : 'text-gray-600'}`}>
-          <span className="text-2xl">📜</span><span className="text-[10px] font-bold">Historial</span>
-        </button>
-        <button onClick={() => setTab('pay')} className={`flex flex-col items-center gap-1 ${tab === 'pay' ? 'text-green-500' : 'text-gray-600'}`}>
-          <span className="text-2xl">💎</span><span className="text-[10px] font-bold">Premium</span>
-        </button>
-      </nav>
-    </div>
-  );
-}
-
-export default App;
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { font-family: 'Inter', sans-serif; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="bg-white dark:bg-zinc-950 flex items-center justify-between px-6 py-4 w-full h-16 fixed top-0 z-50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-green-800 dark:text-green-500" data-icon="nutrition">nutrition</span>
+<span class="text-green-800 dark:text-green-500 font-manrope font-bold text-lg tracking-tight font-extrabold tracking-tighter">Vitality</span>
+</div>
+<div class="flex items-center gap-4">
+<a class="text-on-surface-variant text-sm font-medium hover:text-primary transition-colors" href="#">@vivosinazucar</a>
+<button class="active:scale-95 duration-200 hover:bg-zinc-50 dark:hover:bg-zinc-900 p-2 rounded-full">
+<span class="material-symbols-outlined text-zinc-400 dark:text-zinc-600" data-icon="share">share</span>
+</button>
+</div>
+</header>
+<main class="pt-20 px-6 max-w-2xl mx-auto space-y-8">
+<!-- Trial Limit Alert Bar -->
+<div class="bg-secondary-container text-on-secondary-container px-6 py-4 rounded-lg flex items-center gap-4 shadow-sm">
+<span class="material-symbols-outlined text-secondary" data-icon="warning">warning</span>
+<p class="text-sm font-semibold">Has alcanzado el límite de escaneos gratuitos hoy. <span class="underline">Pásate a Premium</span>.</p>
+</div>
+<!-- Scanner Hero Component -->
+<section class="relative">
+<div class="bg-surface-container-lowest rounded-xl p-8 shadow-[0_8px_24px_rgba(46,46,50,0.06)] overflow-hidden relative group">
+<!-- Decorative Abstract Background -->
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary-container/20 rounded-full blur-3xl -mr-20 -mt-20"></div>
+<div class="relative z-10 flex flex-col items-center text-center space-y-6">
+<div class="w-24 h-24 bg-primary-container rounded-full flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-primary text-5xl" data-icon="barcode_scanner">barcode_scanner</span>
+</div>
+<div>
+<h2 class="text-3xl font-extrabold tracking-tight text-on-surface leading-tight">Analiza tu compra en segundos</h2>
+<p class="text-on-surface-variant mt-2 max-w-sm">Detecta azúcares ocultos y toma mejores decisiones para tu salud.</p>
+</div>
+<!-- Main Action Button -->
+<button class="w-full bg-gradient-to-br from-primary to-primary-dim text-on-primary font-bold py-5 px-8 rounded-full shadow-lg active:scale-95 transition-transform duration-200 flex items-center justify-center gap-3">
+<span class="material-symbols-outlined" data-icon="photo_camera">photo_camera</span>
+                        ESCANEAR ETIQUETA
+                    </button>
+</div>
+</div>
+</section>
+<!-- Results Verdict Card (Success State) -->
+<section class="space-y-6">
+<div class="bg-surface-container-low p-1 rounded-xl">
+<div class="bg-surface-container-lowest rounded-xl p-6 flex items-start gap-6 relative overflow-hidden">
+<!-- Status Indicator Vertical Line Replacement (Space-based) -->
+<div class="flex-shrink-0 w-16 h-16 bg-primary-container rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container text-4xl" data-icon="check_circle">check_circle</span>
+</div>
+<div class="space-y-1 flex-1">
+<span class="text-primary font-bold text-sm tracking-widest uppercase">VEREDICTO VITALITY</span>
+<h3 class="text-4xl font-extrabold text-primary leading-none">SÍ SE PUEDE</h3>
+<p class="text-on-surface-variant pt-2 leading-relaxed">Este producto no contiene azúcares añadidos ni edulcorantes perjudiciales detectados.</p>
+</div>
+</div>
+</div>
+<!-- Product Detail Info -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="bg-surface-container-lowest rounded-lg overflow-hidden shadow-sm flex flex-col">
+<div class="h-48 w-full bg-zinc-100 relative">
+<img alt="healthy yogurt product" class="w-full h-full object-cover" data-alt="Close up of a clean white yogurt container on a minimal background with fresh blueberries nearby" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCuP93prqt1T1xUdbSJlbk8p09tSXBvuKutWpKhSz8100m0gl2vwz0lWcj5Fq5aEGjWpGk5yx1EM5iB3jKXkpjoI7317H8vqWiDR4kvVSKyTtyWVGlLJCcOjTvsHZWCnAlCWu7mS1VaDTDsiuVFQRJSOkoT6UKOuHFYbRv9SRAOxfnqbAG1muuPs862KTiBK_uvknZIJW5xBJ6Tl_ZAOjWyZRrxbI_2XwCWfOiZjYayCExKdrbyoII2QGUvTdiyPdsy-F4_mMJDVco"/>
+</div>
+<div class="p-6 space-y-3">
+<h4 class="text-xl font-bold">Yogur Griego Natural</h4>
+<div class="flex gap-2">
+<span class="bg-primary-container text-on-primary-container text-[11px] font-bold px-3 py-1 rounded-full uppercase">Saludable</span>
+<span class="bg-surface-container-high text-on-surface-variant text-[11px] font-bold px-3 py-1 rounded-full uppercase">Sin Azúcar</span>
+</div>
+</div>
+</div>
+<!-- Explanation/Nutritional Insight -->
+<div class="bg-surface-container-lowest rounded-lg p-6 flex flex-col justify-between border-l-4 border-primary shadow-sm">
+<div class="space-y-4">
+<h4 class="font-bold text-on-surface">Análisis de Ingredientes</h4>
+<ul class="space-y-3">
+<li class="flex items-center gap-3 text-sm">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="done">done</span>
+<span>Leche entera pasteurizada</span>
+</li>
+<li class="flex items-center gap-3 text-sm">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="done">done</span>
+<span>Fermentos lácticos vivos</span>
+</li>
+<li class="flex items-center gap-3 text-sm">
+<span class="material-symbols-outlined text-primary text-lg" data-icon="done">done</span>
+<span>0% Jarabe de Maíz</span>
+</li>
+</ul>
+</div>
+<div class="mt-6 pt-6 border-t border-surface-container-low">
+<p class="text-xs text-on-surface-variant italic">Basado en la guía oficial de @vivosinazucar</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Amazon Promo Card -->
+<section class="bg-tertiary-container/10 rounded-xl p-8 flex flex-col md:flex-row items-center gap-8 border border-tertiary/20">
+<div class="w-32 h-44 bg-surface shadow-xl rounded flex-shrink-0 relative transform -rotate-3 overflow-hidden">
+<img alt="recipe book cover" class="w-full h-full object-cover" data-alt="A premium cookbook cover with colorful healthy salad photography and elegant typography titled Recipes for Life" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-VHP9cg5EQIa22m1-q5sNKlG25MahfxxyZvK4q2DkImrjmGDyG7fsnXcXmnWSYPnJAEFNhxVklzBKLuOI6NjfUUKtRI6XMeNjafOmo3kxg4Z01qEa8ukCAK_RnsodZLcv_NYxoATYFozKgXhesnuxMiLbKGL-LbG_EoRijDH4eQZzGruvV9kQk_AIYDtGdBWwVMFXlHJ7quk2ILqFhk7ct2TK1-eyPP8DEfyikTWoq6m5-7ytPN7s7O3E9dMR8zoi9PKmJgPPUPA"/>
+</div>
+<div class="flex-1 text-center md:text-left space-y-4">
+<h3 class="text-2xl font-extrabold text-on-tertiary-container">📙 Recetario de Luisa en Amazon</h3>
+<p class="text-on-tertiary-container/80 text-sm leading-relaxed">Descubre más de 100 recetas sin azúcar que transformarán tu salud sin sacrificar el sabor.</p>
+<button class="bg-tertiary text-on-tertiary font-bold py-3 px-6 rounded-full inline-flex items-center gap-2 hover:bg-tertiary-dim transition-colors">
+                    Ver en Amazon
+                    <span class="material-symbols-outlined text-sm" data-icon="open_in_new">open_in_new</span>
+</button>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-6 pt-3 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl shadow-[0_-8px_24px_rgba(46,46,50,0.06)] rounded-t-[3rem]">
+<a class="flex flex-col items-center justify-center bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 rounded-full px-6 py-2 active:scale-90 transition-transform duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="barcode_scanner">barcode_scanner</span>
+<span class="font-manrope font-semibold text-[11px]">Scanner</span>
+</a>
+<a class="flex flex-col items-center justify-center text-zinc-500 dark:text-zinc-400 px-6 py-2 hover:text-green-700 dark:hover:text-green-300 active:scale-90 transition-transform duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="font-manrope font-semibold text-[11px]">Historial</span>
+</a>
+<a class="flex flex-col items-center justify-center text-zinc-500 dark:text-zinc-400 px-6 py-2 hover:text-green-700 dark:hover:text-green-300 active:scale-90 transition-transform duration-300" href="#">
+<span class="material-symbols-outlined" data-icon="workspace_premium">workspace_premium</span>
+<span class="font-manrope font-semibold text-[11px]">Premium</span>
+</a>
+</nav>
+</body></html>
