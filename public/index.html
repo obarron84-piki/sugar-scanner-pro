@@ -2,11 +2,30 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta
+      name="description"
+      content="Sugar Scanner - Analiza etiquetas nutricionales con IA"
+    />
     <title>Sugar Scanner Pro</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <script src="https://sdk.mercadopago.com/js/v2"></script>
+
+    <style>
+      /* Evita el scroll elástico en iOS y pone el fondo correcto desde el inicio */
+      body {
+        background-color: #1a1a1a;
+        margin: 0;
+        overscroll-behavior: none;
+      }
+    </style>
   </head>
-  <body class="bg-black">
+  <body>
+    <noscript>Necesitas habilitar JavaScript para ejecutar esta aplicación.</noscript>
     <div id="root"></div>
   </body>
 </html>
